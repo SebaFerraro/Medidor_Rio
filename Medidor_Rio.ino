@@ -17,7 +17,7 @@
 #define ANALOG_PIN_0 34
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  60      /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  600      /* Time ESP32 will go to sleep (in seconds) */
 
 #define RXD2 16
 #define TXD2 17
@@ -67,7 +67,7 @@ void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
 // payload to send to TTN gateway
-static uint8_t payload[5];
+static uint8_t payload[9];
 static osjob_t sendjob;
 float h=0;
 float t=0;
@@ -201,10 +201,13 @@ void do_send(osjob_t* j){
         // read the humidity from the DHT22
         float rTemperature =t;
         float rHumidity =h;
+        float rVolt =v;
+        float rArio =lvl;
         // adjust for the f2sflt16 range (-1 to 1)
         rHumidity = rHumidity / 100;
-        rTemperature =v;
-        //rTemperature =rTemperature /100;
+        rVolt = rVolt / 10;
+        rTemperature =rTemperature /100;
+        rArio =rArio /10000;
         // float -> int
         // note: this uses the sflt16 datum (https://github.com/mcci-catena/arduino-lmic#sflt16)
         uint16_t payloadTemp = LMIC_f2sflt16(rTemperature);
@@ -216,12 +219,25 @@ void do_send(osjob_t* j){
         payload[1] = tempHigh;
 
         // float -> int
-        uint16_t payloadHumid = LMIC_f2sflt16(rHumidity);
+        payloadTemp = LMIC_f2sflt16(rHumidity);
         // int -> bytes
-        byte humidLow = lowByte(payloadHumid);
-        byte humidHigh = highByte(payloadHumid);
+        byte humidLow = lowByte(payloadTemp);
+        byte humidHigh = highByte(payloadTemp);
         payload[2] = humidLow;
         payload[3] = humidHigh;
+
+        payloadTemp = LMIC_f2sflt16(rVolt);
+        tempLow = lowByte(payloadTemp);
+        tempHigh = highByte(payloadTemp);
+        payload[4] = tempLow;
+        payload[5] = tempHigh;
+
+        payloadTemp = LMIC_f2sflt16(rArio);
+        tempLow = lowByte(payloadTemp);
+        tempHigh = highByte(payloadTemp);
+        payload[6] = tempLow;
+        payload[7] = tempHigh;
+        
         Serial.println( sizeof(payload)-1);
         // prepare upstream data transmission at the next possible time.
         // transmit on port 1 (the first parameter); you can use any value from 1 to 223 (others are reserved).
@@ -271,10 +287,13 @@ float Sonar_Medir() { //Choose Serial1 or Serial2 as required
   int valor=0;
 
   digitalWrite(SONARE,LOW);
+  Serial.println("SONARE LOW");
   delay(100);
   digitalWrite(SONARE,HIGH);
-  delay(2000);
+  Serial.println("SONARE HIGH");
+  delay(3000);
   digitalWrite(SONARE,LOW);
+  Serial.println("SONARE LOW");
   delay(100);
   while (Serial2.available()) {
     c=(char(Serial2.read()));
@@ -282,8 +301,9 @@ float Sonar_Medir() { //Choose Serial1 or Serial2 as required
       phrase = String(phrase + c);  
     }else{
       valor=phrase.toInt();
+      Serial.print("Valor :");
       Serial.println(valor);
-      if(valor!=9999){
+      if((valor!=9999) && (valor!=0)){
         promedio=promedio+valor;
         n++;
      }
@@ -321,7 +341,7 @@ float get_vcc(){
   int steps=analogRead(ANALOG_PIN_0);
   Serial.print("Voltage Steps = ");
   Serial.println(steps);
-  float VBAT = 3.90f * float(steps) / 4096.0f;  // LiPo battery
+  float VBAT = 5.2f * 2 * float(steps) / 4095.0f;  // LiPo battery
   return VBAT;
 }
 void radio_off(){
@@ -344,7 +364,8 @@ void setup() {
   digitalWrite(DHT_PWR, HIGH);
   digitalWrite(LVL_PWR, HIGH);
   analogReadResolution(12); //12 bits
-  analogSetAttenuation(ADC_11db);  //For all pins
+  //analogSetAttenuation(ADC_11db);  //For all pins
+  //analogSetPinAttenuation(ANALOG_PIN_0, ADC_11db); //0db attenu
   analogSetPinAttenuation(ANALOG_PIN_0, ADC_11db); //0db attenu
   Serial.println(F("LMIC"));
   if (loraState.inited != INITED_FLAG) {
@@ -429,11 +450,11 @@ void loop() {
   digitalWrite(LVL_PWR, LOW);
   
   adc_power_off();
-  delay(2000);
+  delay(1000);
   loraState.seqnoUp = LMIC.seqnoUp;
   Serial.print("loraState.seqnoUp = "); Serial.println(loraState.seqnoUp);    
   Serial.print("Up time "); Serial.print(millis());
   os_radio(RADIO_RST);
-  delay(2000);
+  delay(1000);
   esp_deep_sleep_start();
  }
